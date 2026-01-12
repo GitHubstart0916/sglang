@@ -149,10 +149,24 @@ class ReqToTokenPool:
             self.req_to_token = torch.zeros(
                 (self._alloc_size, max_context_len), dtype=torch.int32, device=device
             )
+            self.req_to_sparse_16_token = torch.zeros(
+                (size, int((max_context_len - 32) / 16) + 1), dtype=torch.int32, device=device
+            )
+            self.req_to_sparse_64_token = torch.zeros(
+                (size, int((max_context_len - 128) / 64) + 1), dtype=torch.int32, device=device
+            )
+        self.compress_k1_len = torch.zeros((size), dtype=torch.int32, device="cpu")
+        self.compress_k2_len = torch.zeros((size), dtype=torch.int32, device="cpu")
         self.free_slots = list(range(1, self._alloc_size))
 
     def write(self, indices, values):
         self.req_to_token[indices] = values
+
+    def write_sparse_16(self, indices, values):
+        self.req_to_sparse_16_token[indices] = values
+
+    def write_sparse_64(self, indices, values):
+        self.req_to_sparse_64_token[indices] = values
 
     def available_size(self):
         return len(self.free_slots)
@@ -185,8 +199,12 @@ class ReqToTokenPool:
 
     def free(self, req: Req):
         assert req.req_pool_idx is not None, "request must have req_pool_idx"
-        self.free_slots.append(req.req_pool_idx)
+        idx = req.req_pool_idx
+        self.free_slots.append(idx)
+        self.compress_k1_len[idx] = 0
+        self.compress_k2_len[idx] = 0
         req.req_pool_idx = None
+
 
     def clear(self):
         self.free_slots = list(range(1, self._alloc_size))
