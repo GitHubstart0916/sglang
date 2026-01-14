@@ -296,10 +296,10 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
     seq_lens_sum: int
 
     # sparse related compressed cache loc
-    sparse_16_loc: torch.Tensor = None
-    sparse_64_loc: torch.Tensor = None
-    token_num_sparse_16_cpu: torch.Tensor = None
-    token_num_sparse_64_cpu: torch.Tensor = None
+    sparse_k1_loc: torch.Tensor = None
+    sparse_k2_loc: torch.Tensor = None
+    token_num_sparse_k1_cpu: torch.Tensor = None
+    token_num_sparse_k2_cpu: torch.Tensor = None
     
     # The original sequence length without being chunked. Qwen-1M related.
     orig_seq_lens: Optional[torch.Tensor] = None
@@ -485,10 +485,10 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
             req_pool_indices=batch.req_pool_indices,
             seq_lens=batch.seq_lens,
             out_cache_loc=batch.out_cache_loc,
-            sparse_16_loc=batch.sparse_16_loc,
-            sparse_64_loc=batch.sparse_64_loc,
-            token_num_sparse_16_cpu=batch.token_num_sparse_16_cpu,
-            token_num_sparse_64_cpu=batch.token_num_sparse_64_cpu,
+            sparse_k1_loc=batch.sparse_k1_loc,
+            sparse_k2_loc=batch.sparse_k2_loc,
+            token_num_sparse_k1_cpu=batch.token_num_sparse_k1_cpu,
+            token_num_sparse_k2_cpu=batch.token_num_sparse_k2_cpu,
             mamba_track_indices=batch.mamba_track_indices,
             mamba_track_mask=batch.mamba_track_mask,
             mamba_track_seqlens=batch.mamba_track_seqlens,

@@ -33,6 +33,7 @@ from sglang.srt.mem_cache.memory_pool import (
     NoOpMHATokenToKVPool,
     NSATokenToKVPool,
     ReqToTokenPool,
+    MiniCPMReqToTokenPool,
 )
 from sglang.srt.mem_cache.swa_memory_pool import SWAKVPool, SWATokenToKVPoolAllocator
 from sglang.srt.utils.common import (
@@ -311,6 +312,16 @@ class ModelRunnerKVCacheMixin:
                     speculative_num_draft_tokens=self.server_args.speculative_num_draft_tokens,
                     enable_overlap_schedule=not self.server_args.disable_overlap_schedule,
                     start_layer=self.start_layer,
+                )
+            elif self.model_config.minicpm_sparse_config is not None:
+                self.req_to_token_pool = MiniCPMReqToTokenPool(
+                    size=max_num_reqs,
+                    max_context_len=self.model_config.context_len
+                    + extra_max_context_len,
+                    device=self.device,
+                    enable_memory_saver=self.server_args.enable_memory_saver,
+                    kernel_size = self.model_config.minicpm_sparse_config.kernel_size,
+                    kernel_stride = self.model_config.minicpm_sparse_config.kernel_stride,
                 )
             else:
                 self.req_to_token_pool = ReqToTokenPool(
