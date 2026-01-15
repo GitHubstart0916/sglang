@@ -1039,6 +1039,7 @@ class FlashAttentionBackend(AttentionBackend):
                         forward_batch=forward_batch,
                         compress_k1=self.compress_k1,
                         compress_k2=self.compress_k2,
+                        metadata=self.forward_metadata,
                         batch_id=i
                     )
                     pt += seqlens_q[i] # update key_states ptr
@@ -1058,6 +1059,7 @@ class FlashAttentionBackend(AttentionBackend):
                     forward_batch=forward_batch,
                     compress_k1=self.compress_k1,
                     compress_k2=self.compress_k2,
+                    metadata=self.forward_metadata,
                     batch_id=i
                 )
                 assert k1[1] == k1_lens[i], "k1 shape mismatch, expected {}, got {}".format(k1_lens[i], k1[1])
@@ -1116,6 +1118,7 @@ class FlashAttentionBackend(AttentionBackend):
                 forward_batch=forward_batch,
                 compress_k1=self.compress_k1,
                 compress_k2=self.compress_k2,
+                metadata=self.forward_metadata,
                 batch_id=decode_batch_id
             )
             query_states = query_states.reshape(-1, query_states.shape[2], query_states.shape[3])
@@ -1338,13 +1341,15 @@ class FlashAttentionBackend(AttentionBackend):
             for b in range(bs):
                 kv_len = forward_batch.seq_lens_cpu[b]
                 attention_mask = torch.ones(bs, kv_len, dtype=torch.int64, device=q.device)
+                # TODO key_states is not used in get_compress_k? pass in batch_id 
                 get_compress_k(
                     key_states=k[b:b+1, :, :].unsqueeze(0),
                     attention_mask=attention_mask,
                     layer=layer,
                     forward_batch=forward_batch,
                     compress_k1=self.compress_k1,
-                    compress_k2=self.compress_k2
+                    compress_k2=self.compress_k2,
+                    metadata=self.forward_metadata,
                 )  
 
         q_reshaped = q.contiguous().view(-1, layer.tp_q_head_num // 2, layer.head_dim)
@@ -1903,13 +1908,15 @@ class FlashAttentionBackend(AttentionBackend):
                     else:
                         kv_len = forward_batch.seq_lens_cpu[b]
                         attention_mask = torch.ones(bs, kv_len, dtype=torch.int64, device=q_reshaped.device)
+                        # TODO key_states is not used in get_compress_k? pass in batch_id 
                         get_compress_k(
                             key_states=k[b:b+1, :, :].unsqueeze(0),
                             attention_mask=attention_mask,
                             layer=layer,
                             forward_batch=forward_batch,
                             compress_k1=self.compress_k1,
-                            compress_k2=self.compress_k2
+                            compress_k2=self.compress_k2,
+                            metadata=self.forward_metadata,
                         )
 
                         forward_batch.sparse_page_table_sparse_bs[2 * b, :page_table.shape[1]] = page_table[b] * 2
