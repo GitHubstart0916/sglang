@@ -233,6 +233,7 @@ def attn_backend_wrapper(runner: "ModelRunner", full_attn_backend: "AttentionBac
             from sglang.srt.layers.attention.hybrid_linear_attn_backend import (
                 HybridLinearAttnBackend,
                 Mamba2AttnBackend,
+                SimpleGLAAttnBackend,
             )
             from sglang.srt.layers.attention.linear.gdn_backend import GDNAttnBackend
         else:
@@ -268,6 +269,8 @@ def attn_backend_wrapper(runner: "ModelRunner", full_attn_backend: "AttentionBac
             linear_attn_backend = KDAAttnBackend(runner)
         elif runner.hybrid_lightning_config is not None:
             linear_attn_backend = LightningAttentionBackend(runner)
+        elif runner.minicpm_hybrid_config is not None:
+            linear_attn_backend = SimpleGLAAttnBackend(runner)
         else:
             spec_result = get_linear_attn_config(runner.model_config.hf_config)
             if spec_result is not None:

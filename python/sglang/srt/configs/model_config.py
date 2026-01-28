@@ -159,6 +159,11 @@ def get_num_indexer_layers(config) -> int:
     return getattr(config, "num_indexer_layers", 0)
 
 
+def is_minicpm_hybrid(config: PretrainedConfig) -> bool:
+    """Check if this is a hybrid MiniCPM model with mixed attention layers"""
+    from sglang.srt.configs.minicpm import MiniCPMHybridConfig
+    return isinstance(config, MiniCPMHybridConfig)
+
 class ModelConfig:
     def __init__(
         self,
