@@ -299,8 +299,8 @@ class ModelRunnerKVCacheMixin:
                     max_context_len=self.model_config.context_len + extra_max_context_len,
                     device=self.device,
                     enable_memory_saver=self.server_args.enable_memory_saver,
-                    kernel_size=self.model_config.minicpm_sparse_config.kernel_size if hasattr(self.model_config, 'minicpm_sparse_config') and self.model_config.minicpm_sparse_config is not None else 32,
-                    kernel_stride=self.model_config.minicpm_sparse_config.kernel_stride if hasattr(self.model_config, 'minicpm_sparse_config') and self.model_config.minicpm_sparse_config is not None else 16,
+                    kernel_size=self.model_config.sparse_kernel_size if self.model_config.has_sparse_attention else 32,
+                    kernel_stride=self.model_config.sparse_kernel_stride if self.model_config.has_sparse_attention else 16,
                     cache_params=self.minicpm_hybrid_config.mamba2_cache_params,
                     mamba_size=self.server_args.max_mamba_cache_size,
                     mamba_spec_state_size=max_num_reqs,
@@ -329,15 +329,15 @@ class ModelRunnerKVCacheMixin:
                     enable_overlap_schedule=not self.server_args.disable_overlap_schedule,
                     start_layer=self.start_layer,
                 )
-            elif self.model_config.minicpm_sparse_config is not None:
+            elif self.model_config.has_sparse_attention:
                 self.req_to_token_pool = MiniCPMReqToTokenPool(
                     size=max_num_reqs,
                     max_context_len=self.model_config.context_len
                     + extra_max_context_len,
                     device=self.device,
                     enable_memory_saver=self.server_args.enable_memory_saver,
-                    kernel_size = self.model_config.minicpm_sparse_config.kernel_size,
-                    kernel_stride = self.model_config.minicpm_sparse_config.kernel_stride,
+                    kernel_size = self.model_config.sparse_kernel_size,
+                    kernel_stride = self.model_config.sparse_kernel_stride,
                 )
             else:
                 self.req_to_token_pool = ReqToTokenPool(

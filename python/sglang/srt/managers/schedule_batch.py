@@ -1553,7 +1553,7 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
     cu_new_compress_k2_token_nums_cpu: Optional[torch.Tensor] = None
     total_compress_k2_token_nums_cpu: Optional[torch.Tensor] = None
     cu_total_compress_k2_token_nums_cpu: Optional[torch.Tensor] = None
-    
+
     cache_seqlens_int32_stage1_cpu: Optional[torch.Tensor] = None
 
     @classmethod
@@ -1743,9 +1743,9 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
         extend_lens = [r.extend_input_len for r in reqs]
         # compressed kv cache loc per bs
         
-        if self.model_config.minicpm_sparse_config is not None:
-            kernel_size = self.model_config.minicpm_sparse_config.kernel_size
-            kernel_stride = self.model_config.minicpm_sparse_config.kernel_stride
+        if self.model_config.has_sparse_attention:
+            kernel_size = self.model_config.sparse_kernel_size
+            kernel_stride = self.model_config.sparse_kernel_stride
             token_num_sparse_k1_total = [((seq_len - kernel_size) // kernel_stride + 1 if seq_len >= kernel_size else 0) for seq_len in seq_lens]
             token_num_sparse_k1_prefix = [((prefix_len - kernel_size) // kernel_stride + 1 if prefix_len >= kernel_size else 0) for prefix_len in prefix_lens]
             token_num_sparse_k1 = [
@@ -1802,7 +1802,7 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
         self.seq_lens = seq_lens_tensor
         self.seq_lens_cpu = seq_lens_cpu
         self.extend_num_tokens = extend_num_tokens
-        if self.model_config.minicpm_sparse_config is not None:
+        if self.model_config.has_sparse_attention:
             self.token_sum_sparse_k1 = token_sum_sparse_k1
             self.token_sum_sparse_k2 = token_sum_sparse_k2
             self.token_num_sparse_k1_cpu = torch.tensor(token_num_sparse_k1, dtype=torch.int64)
@@ -2397,10 +2397,10 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
         if self.model_config.is_encoder_decoder:
             self.prepare_encoder_info_decode()
 
-        if self.model_config.minicpm_sparse_config is not None:
+        if self.model_config.has_sparse_attention:
             seq_lens_next = self.seq_lens + 1
-            kernel_size = self.model_config.minicpm_sparse_config.kernel_size
-            kernel_stride = self.model_config.minicpm_sparse_config.kernel_stride
+            kernel_size = self.model_config.sparse_kernel_size
+            kernel_stride = self.model_config.sparse_kernel_stride
             token_num_sparse_k1 = [(1 if seq_lens_next[batch_idx] >= kernel_size and (seq_lens_next[batch_idx] - kernel_size) % kernel_stride == 0 else 0) for batch_idx in range(bs)]
             token_sum_sparse_k1 = sum(token_num_sparse_k1)
             token_num_sparse_k2 = [(1 if seq_lens_next[batch_idx] >= kernel_size * 4 and (seq_lens_next[batch_idx] - kernel_size * 4) % (kernel_stride * 4) == 0 else 0) for batch_idx in range(bs)]
@@ -2470,24 +2470,23 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
                 .to(device=self.device, non_blocking=True)
             )
 
-        is_sparse_minicpm = self.model_config.minicpm_sparse_config is not None
-        
+        is_sparse_minicpm = self.model_config.has_sparse_attention
+
         if is_sparse_minicpm:
             # sparse minicpm
-            minicpm_sparse_config = self.model_config.minicpm_sparse_config
-            
-            topk = minicpm_sparse_config.topk
-            block_size = minicpm_sparse_config.block_size
-            window_size = minicpm_sparse_config.window_size
+
+            topk = self.model_config.sparse_topk
+            block_size = self.model_config.sparse_block_size
+            window_size = self.model_config.sparse_window_size
             sparse_topk = topk + (window_size // block_size)
             num_sparse_topk_tokens = block_size * sparse_topk
-            
-            k1_kernel_size = minicpm_sparse_config.kernel_size
-            k1_kernel_stride = minicpm_sparse_config.kernel_stride
+
+            k1_kernel_size = self.model_config.sparse_kernel_size
+            k1_kernel_stride = self.model_config.sparse_kernel_stride
             k2_kernel_size = k1_kernel_size * 4
             k2_kernel_stride = k1_kernel_stride * 4
-            
-            mod_block_size_cpu = self.seq_lens.to(device="cpu") % minicpm_sparse_config.block_size
+
+            mod_block_size_cpu = self.seq_lens.to(device="cpu") % self.model_config.sparse_block_size
             cu_seqlens_k_cpu = F.pad(torch.cumsum(self.seq_lens_cpu, dim=0, dtype=torch.int32), (1, 0))
             cu_seqlens_q_cpu = torch.arange(0, bs + 1, dtype=torch.int32).to(device="cpu")
             
@@ -2498,11 +2497,11 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
             )
             
             self.sparse_cache_seqlens_int32_cpu = torch.repeat_interleave(sparse_cache_seqlens_cpu, 2)
-            self.cache_seqlens_int32_stage1_cpu = self.seq_lens_cpu - 1
             
             self.sparse_cu_seqlens_k_cpu = F.pad(torch.cumsum(self.sparse_cache_seqlens_int32_cpu, dim=0, dtype=torch.int32), (1, 0))
             
             self.cache_seqlens_int32_cpu = self.seq_lens.to(dtype=torch.int32, device="cpu")
+            self.cache_seqlens_int32_stage1_cpu = self.seq_lens_cpu - 1
             
             self.seqlens_k1_cpu = (self.cache_seqlens_int32_cpu - k1_kernel_size) // k1_kernel_stride + 1
             self.seqlens_k2_cpu = (self.cache_seqlens_int32_cpu - k2_kernel_size) // k2_kernel_stride + 1
@@ -2535,6 +2534,7 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
             self.total_compress_k2_token_nums_cpu = self.history_compress_k2_token_nums_cpu + self.new_compress_k2_token_nums_cpu
             self.cu_total_compress_k1_token_nums_cpu = F.pad(torch.cumsum(self.total_compress_k1_token_nums_cpu, dim=0, dtype=torch.int32), (1, 0))
             self.cu_total_compress_k2_token_nums_cpu = F.pad(torch.cumsum(self.total_compress_k2_token_nums_cpu, dim=0, dtype=torch.int32), (1, 0))
+            
 
     def maybe_wait_verify_done(self):
         if self.is_spec_v2:
@@ -2781,6 +2781,7 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
             total_compress_k2_token_nums_cpu=self.total_compress_k2_token_nums_cpu,
             cu_total_compress_k2_token_nums_cpu=self.cu_total_compress_k2_token_nums_cpu,
             cache_seqlens_int32_stage1_cpu=self.cache_seqlens_int32_stage1_cpu,
+
         )
 
     def copy(self):

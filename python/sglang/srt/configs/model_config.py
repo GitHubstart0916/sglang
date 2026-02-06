@@ -36,7 +36,6 @@ from sglang.srt.utils.hf_transformers_utils import (
 )
 from sglang.srt.utils.runai_utils import ObjectStorageModel, is_runai_obj_uri
 from sglang.utils import is_in_ci
-from sglang.srt.configs.minicpm import MiniCPMSparseConfig
 
 logger = logging.getLogger(__name__)
 
@@ -135,13 +134,6 @@ def get_nsa_index_n_heads(config: PretrainedConfig) -> int:
     assert is_deepseek_nsa(config)
     return config.index_n_heads
 
-def is_minicpm_sparse(config: PretrainedConfig) -> bool:
-    return (
-        config.architectures is not None
-        and config.architectures[0] == "MiniCPMForCausalLM"
-        and getattr(config, "sparse_config", None) is not None
-    )
-
 def get_num_indexer_layers(config) -> int:
     """Layer count for the global indexer-topk capturer's host buffer.
 
@@ -217,7 +209,6 @@ class ModelConfig:
             model_config_parser=model_config_parser,
             **kwargs,
         )
-        self.minicpm_sparse_config = MiniCPMSparseConfig.from_hf_config(self.hf_config) if is_minicpm_sparse(self.hf_config) else None
         self.hf_text_config = get_hf_text_config(self.hf_config)
         self.hf_generation_config = get_generation_config(
             self.model_path,
@@ -380,6 +371,56 @@ class ModelConfig:
         self.is_matryoshka = self.matryoshka_dimensions or getattr(
             self.hf_config, "is_matryoshka", False
         )
+
+    @property
+    def has_sparse_attention(self):
+        """Check if model has sparse attention (accesses hf_config.has_sparse_attention)."""
+        return getattr(self.hf_config, "has_sparse_attention", False)
+
+    @property
+    def has_lightning_layers(self):
+        """Check if model has lightning layers (accesses hf_config.has_lightning_layers)."""
+        return getattr(self.hf_config, "has_lightning_layers", False)
+
+    @property
+    def sparse_layer_ids(self):
+        """Get layer IDs with sparse attention (accesses hf_config.sparse_layer_ids)."""
+        return getattr(self.hf_config, "sparse_layer_ids", [])
+
+    @property
+    def lightning_layer_ids(self):
+        """Get layer IDs with lightning attention (accesses hf_config.lightning_layer_ids)."""
+        return getattr(self.hf_config, "lightning_layer_ids", [])
+
+    @property
+    def sparse_block_size(self):
+        """Get sparse block size (accesses hf_config.sparse_block_size)."""
+        return getattr(self.hf_config, "sparse_block_size", 32)
+
+    @property
+    def sparse_kernel_size(self):
+        """Get sparse kernel size (accesses hf_config.sparse_kernel_size)."""
+        return getattr(self.hf_config, "sparse_kernel_size", 32)
+
+    @property
+    def sparse_kernel_stride(self):
+        """Get sparse kernel stride (accesses hf_config.sparse_kernel_stride)."""
+        return getattr(self.hf_config, "sparse_kernel_stride", 16)
+
+    @property
+    def sparse_topk(self):
+        """Get sparse topk value (accesses hf_config.sparse_topk)."""
+        return getattr(self.hf_config, "sparse_topk", 8)
+
+    @property
+    def sparse_window_size(self):
+        """Get sparse window size (accesses hf_config.sparse_window_size)."""
+        return getattr(self.hf_config, "sparse_window_size", 64)
+
+    @property
+    def sparse_dense_len(self):
+        """Get sparse dense length (accesses hf_config.sparse_dense_len)."""
+        return getattr(self.hf_config, "sparse_dense_len", 512)
 
     @staticmethod
     def from_server_args(
