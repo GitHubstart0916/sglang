@@ -712,6 +712,7 @@ class ServerArgs:
     disable_cuda_graph_padding: bool = False
     enable_breakable_cuda_graph: bool = False
     fuse_topk: bool = False
+    force_dense_minicpm: bool = False
     enable_profile_cuda_graph: bool = False
     enable_cudagraph_gc: bool = False
     debug_cuda_graph: bool = False
@@ -2406,6 +2407,7 @@ class ServerArgs:
                     sm100_default_attention_backend="triton",
                 )
 
+
         elif model_arch in ["Lfm2ForCausalLM"]:
             self._handle_mamba_radix_cache(
                 model_arch=model_arch,
@@ -2417,6 +2419,13 @@ class ServerArgs:
                 f"{model_arch} does not support triton attention backend, "
                 "as the first layer might not be an attention layer"
             )
+
+        elif model_arch in ["MiniCPMForCausalLM"]:
+            if self.force_dense_minicpm:
+                if self.attention_backend == "minicpm_flashattn":
+                    self.attention_backend = "fa3"
+                elif self.attention_backend == "minicpm_flashinfer":
+                    self.attention_backend = "flashinfer"
 
         if (
             model_arch in ["Qwen3VLForConditionalGeneration"]
@@ -6458,6 +6467,11 @@ class ServerArgs:
             "--fuse-topk",
             action="store_true",
             help="fuse stage1+maxpool+topk in minicpm into a single kernel",
+        )
+        parser.add_argument(
+            "--force-dense-minicpm",
+            action="store_true",
+            help="Force dense attention in minicpm",
         )
         parser.add_argument(
             "--enable-profile-cuda-graph",

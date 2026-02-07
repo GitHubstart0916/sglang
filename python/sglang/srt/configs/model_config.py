@@ -178,6 +178,7 @@ class ModelConfig:
         language_only: bool = False,
         disable_hybrid_swa_memory: bool = False,
         model_config_parser: str = "auto",
+        force_dense_minicpm: bool = False,
     ) -> None:
         # Parse args
         self.model_path = model_path
@@ -244,6 +245,8 @@ class ModelConfig:
                 )
             else:
                 enable_multimodal = True
+        
+        self.force_dense_minicpm = force_dense_minicpm
 
         # Config draft model
         self._config_draft_model()
@@ -375,7 +378,7 @@ class ModelConfig:
     @property
     def has_sparse_attention(self):
         """Check if model has sparse attention (accesses hf_config.has_sparse_attention)."""
-        return getattr(self.hf_config, "has_sparse_attention", False)
+        return getattr(self.hf_config, "has_sparse_attention", False) if not self.force_dense_minicpm else False
 
     @property
     def has_lightning_layers(self):
@@ -385,7 +388,7 @@ class ModelConfig:
     @property
     def sparse_layer_ids(self):
         """Get layer IDs with sparse attention (accesses hf_config.sparse_layer_ids)."""
-        return getattr(self.hf_config, "sparse_layer_ids", [])
+        return getattr(self.hf_config, "sparse_layer_ids", []) if not self.force_dense_minicpm else []
 
     @property
     def lightning_layer_ids(self):
@@ -460,6 +463,7 @@ class ModelConfig:
             is_draft_model=is_draft_model,
             disable_hybrid_swa_memory=server_args.disable_hybrid_swa_memory,
             model_config_parser=server_args.model_config_parser,
+            force_dense_minicpm=server_args.force_dense_minicpm,
             **kwargs,
         )
 
