@@ -712,6 +712,7 @@ class ServerArgs:
     disable_cuda_graph_padding: bool = False
     enable_breakable_cuda_graph: bool = False
     fuse_topk: bool = False
+    split_stage1: bool = False
     force_dense_minicpm: bool = False
     enable_profile_cuda_graph: bool = False
     enable_cudagraph_gc: bool = False
@@ -6467,6 +6468,11 @@ class ServerArgs:
             "--fuse-topk",
             action="store_true",
             help="fuse stage1+maxpool+topk in minicpm into a single kernel",
+        )
+        parser.add_argument(
+            "--split-stage1",
+            action="store_true",
+            help="split stage1 into bmm+softmax+reduce_sum in minicpm",
         )
         parser.add_argument(
             "--force-dense-minicpm",
