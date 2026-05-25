@@ -184,8 +184,9 @@ class Mamba2CacheParams(BaseLinearStateParams):
 
 @dataclass(kw_only=True, frozen=True)
 class SimpleGLAStateShape:
+    conv: list[tuple[int, int]] = field(default_factory=list)
     temporal: tuple[int, int, int]
-    
+
     num_heads: int
     head_dim: int
     state_size: int

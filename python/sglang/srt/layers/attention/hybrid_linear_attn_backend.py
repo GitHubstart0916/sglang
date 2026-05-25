@@ -33,7 +33,7 @@ from sglang.srt.distributed import get_tensor_model_parallel_world_size
 from sglang.srt.server_args import get_global_server_args
 from sglang.srt.speculative.eagle_info import EagleDraftInput, EagleVerifyInput
 from sglang.srt.speculative.spec_info import SpecInput
-from sglang.srt.utils import is_cpu
+from sglang.srt.utils import is_cpu, is_cuda
 
 if not is_cpu():
     from sglang.srt.layers.attention.fla.chunk_delta_h import (
