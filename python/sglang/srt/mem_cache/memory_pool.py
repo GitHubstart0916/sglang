@@ -150,6 +150,8 @@ class ReqToTokenPool:
                 (self._alloc_size, max_context_len), dtype=torch.int32, device=device
             )
 
+        self.compress_k1_len = torch.zeros((self._alloc_size), dtype=torch.int32, device="cpu")
+        self.compress_k2_len = torch.zeros((self._alloc_size), dtype=torch.int32, device="cpu")
         self.free_slots = list(range(1, self._alloc_size))
 
     def write(self, indices, values):
@@ -720,10 +722,10 @@ class MiniCPMReqToTokenPool(ReqToTokenPool):
 
         with memory_saver_adapter.region(GPU_MEMORY_TYPE_KV_CACHE):
             self.req_to_sparse_k1_token = torch.zeros(
-                (size, int((max_context_len - kernel_size) / kernel_stride) + 1), dtype=torch.int32, device=device
+                (self._alloc_size, int((max_context_len - kernel_size) / kernel_stride) + 1), dtype=torch.int32, device=device
             )
             self.req_to_sparse_k2_token = torch.zeros(
-                (size, int((max_context_len - kernel_size * 4) / (kernel_stride * 4)) + 1), dtype=torch.int32, device=device
+                (self._alloc_size, int((max_context_len - kernel_size * 4) / (kernel_stride * 4)) + 1), dtype=torch.int32, device=device
             )
 
     def write_sparse_k1(self, indices, values):
@@ -731,6 +733,84 @@ class MiniCPMReqToTokenPool(ReqToTokenPool):
 
     def write_sparse_k2(self, indices, values):
         self.req_to_sparse_k2_token[indices] = values
+
+
+class MiniCPMHybridReqToTokenPool(HybridReqToTokenPool):
+    """Hybrid memory pool for MiniCPM with sparse attention and Simple GLA."""
+
+    def __init__(
+        self,
+        *,
+        size: int,
+        max_context_len: int,
+        device: str,
+        enable_memory_saver: bool,
+        kernel_size: int,
+        kernel_stride: int,
+        cache_params=None,
+        mamba_size: int = None,
+        mamba_spec_state_size: int = None,
+        enable_mamba_extra_buffer: bool = False,
+        speculative_num_draft_tokens: int = None,
+        mamba_layer_ids: List[int] = None,
+        enable_overlap_schedule: bool = True,
+        **kwargs
+    ):
+        if mamba_layer_ids is None and cache_params is not None:
+            mamba_layer_ids = getattr(cache_params, 'layers', [])
+
+        super().__init__(
+            size=size,
+            mamba_size=mamba_size if mamba_size is not None else size,
+            mamba_spec_state_size=mamba_spec_state_size if mamba_spec_state_size is not None else 0,
+            max_context_len=max_context_len,
+            device=device,
+            enable_memory_saver=enable_memory_saver,
+            cache_params=cache_params,
+            enable_mamba_extra_buffer=enable_mamba_extra_buffer,
+            speculative_num_draft_tokens=speculative_num_draft_tokens,
+            mamba_layer_ids=mamba_layer_ids or [],
+            enable_overlap_schedule=enable_overlap_schedule,
+        )
+
+        self.kernel_size = kernel_size
+        self.kernel_stride = kernel_stride
+
+        if kernel_size is not None and kernel_stride is not None:
+            memory_saver_adapter = TorchMemorySaverAdapter.create(enable=enable_memory_saver)
+            with memory_saver_adapter.region(GPU_MEMORY_TYPE_KV_CACHE):
+                k1_size = (max_context_len - kernel_size) // kernel_stride + 1
+                k2_size = (max_context_len - kernel_size * 4) // (kernel_stride * 4) + 1
+
+                self.req_to_sparse_k1_token = torch.zeros(
+                    (self._alloc_size, k1_size),
+                    dtype=torch.int32,
+                    device=device
+                )
+                self.req_to_sparse_k2_token = torch.zeros(
+                    (self._alloc_size, k2_size),
+                    dtype=torch.int32,
+                    device=device
+                )
+        else:
+            self.req_to_sparse_k1_token = None
+            self.req_to_sparse_k2_token = None
+
+    def write_sparse_k1(self, indices, values):
+        if self.req_to_sparse_k1_token is not None:
+            self.req_to_sparse_k1_token[indices] = values
+
+    def write_sparse_k2(self, indices, values):
+        if self.req_to_sparse_k2_token is not None:
+            self.req_to_sparse_k2_token[indices] = values
+
+    def clear(self):
+        super().clear()
+        if self.req_to_sparse_k1_token is not None:
+            self.req_to_sparse_k1_token.zero_()
+        if self.req_to_sparse_k2_token is not None:
+            self.req_to_sparse_k2_token.zero_()
+
 
 class KVCache(abc.ABC):
     @abc.abstractmethod
